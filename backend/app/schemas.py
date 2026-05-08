@@ -80,6 +80,7 @@ class TranscriptSegment(BaseModel):
     phrase_type: PhraseType
     priority: Priority
     show_answer: bool
+    question_id: int | None = None
 
 
 class IngestResponse(BaseModel):
@@ -94,6 +95,16 @@ class PhraseClassification(BaseModel):
     show_answer: bool
 
 
+class AIAnswerRecord(BaseModel):
+    id: int
+    session_id: int
+    question_id: int
+    segment_id: int
+    question_text: str
+    language: str
+    text: str
+
+
 class EventEnvelope(BaseModel):
-    event_type: Literal["transcript_segment", "ingest_rejected", "status"]
+    event_type: Literal["transcript_segment", "ingest_rejected", "ai_answer", "status"]
     payload: dict

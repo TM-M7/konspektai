@@ -14,7 +14,7 @@ The repository now includes a working backend skeleton built around one rule:
 
 ## Current scope
 
-This repo currently implements MVP `0.2` in text-only mode:
+This repo currently implements MVP `0.3` in text-only mode:
 
 - startup dependency checks
 - session creation
@@ -23,9 +23,11 @@ This repo currently implements MVP `0.2` in text-only mode:
 - SQLite persistence
 - WebSocket event broadcasting for UI
 - React frontend for manual ingest testing
+- richer rule-based phrase classification
+- structured notes buckets for questions, important items, deadlines, tasks, definitions, and terms
 - tests for API and core logic
 
-This version intentionally avoids microphone capture so we can prove the realtime pipeline first.
+This version intentionally avoids microphone capture so we can prove the realtime pipeline and study-note structure first.
 
 ## Project layout
 
@@ -77,7 +79,7 @@ Manual text input
   -> classify phrase
   -> save to SQLite
   -> broadcast event to UI
-  -> render subtitle and notes panels
+  -> render subtitle and structured notes panels
 ```
 
 ## API overview
@@ -134,7 +136,7 @@ npm install
 npm run dev
 ```
 
-## Text-only 0.2 flow
+## Text-only 0.3 flow
 
 ```text
 1. Open frontend
@@ -143,7 +145,7 @@ npm run dev
 4. Send to /ingest
 5. Receive WebSocket event
 6. Show subtitle overlay
-7. Add question/important items to notes panel
+7. Sort items into questions, important, deadlines, tasks, definitions, and terms
 ```
 
 ## Example session request
@@ -192,14 +194,12 @@ Response:
 - empty text returns `accepted: false` with `reason: "empty_text"`
 - duplicate text returns `accepted: false` with `reason: "duplicate"`
 - question text is classified as `question`
+- exam-related phrases are classified as `exam_hint`
+- task phrases are classified as `task`
+- definition phrases surface extracted terms in the notes panel
 - WebSocket events include `event_type`
 
 ## Next recommended milestones
-
-`0.3`
-
-- aggregate terms and deadlines in a richer notes panel
-- add better rule-based classification coverage
 
 `0.4`
 

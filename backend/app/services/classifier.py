@@ -12,17 +12,74 @@ QUESTION_PREFIXES = (
     "wann",
     "wer",
     "welche",
+    "welcher",
+    "wieso",
+    "wo",
     "what",
     "why",
     "how",
+    "when",
+    "where",
+    "which",
 )
 
-IMPORTANT_WORDS = ("wichtig", "prufung", "prüfung", "merken", "achtung")
-DEADLINE_WORDS = ("bis", "morgen", "nächste woche", "next week", "deadline")
-DEFINITION_WORDS = ("ist", "bedeutet", "definition", "heisst", "heißt")
-TASK_WORDS = ("mache", "mach", "todo", "aufgabe", "send", "submit")
-EXAMPLE_WORDS = ("beispiel", "for example", "zum beispiel")
-EXAM_HINT_WORDS = ("prüfung", "exam", "test", "ihk", "ap")
+IMPORTANT_PATTERNS = (
+    r"\bwichtig\b",
+    r"\bachtung\b",
+    r"\bmerken\b",
+    r"\bnotier(?:en|t)?\b",
+    r"\bremember\b",
+    r"\bkey point\b",
+)
+EXPLICIT_DEADLINE_PATTERNS = (
+    r"\bbis\s+\d{1,2}(?::\d{2})?\s*uhr\b",
+    r"\bbis\b",
+    r"\bnachste woche\b",
+    r"\bnachsten montag\b",
+    r"\bdeadline\b",
+    r"\bnext week\b",
+    r"\bdue\b",
+)
+SOFT_DEADLINE_PATTERNS = (
+    r"\bmorgen\b",
+    r"\bheute\b",
+    r"\btomorrow\b",
+)
+DEFINITION_PATTERNS = (
+    r"\bist\b",
+    r"\bsind\b",
+    r"\bbedeutet\b",
+    r"\bdefinition\b",
+    r"\bheisst\b",
+    r"\bmeans\b",
+    r"\brefers to\b",
+)
+TASK_PATTERNS = (
+    r"\baufgabe\b",
+    r"\bhausaufgabe\b",
+    r"\bmacht\b",
+    r"\bmachen\b",
+    r"\babgeben\b",
+    r"\bsenden\b",
+    r"\bsubmit\b",
+    r"\bsend\b",
+    r"\bcomplete\b",
+    r"\btodo\b",
+)
+EXAMPLE_PATTERNS = (
+    r"\bbeispiel\b",
+    r"\bzum beispiel\b",
+    r"\bfor example\b",
+    r"\bexample\b",
+)
+EXAM_HINT_PATTERNS = (
+    r"\bprufung\b",
+    r"\bihk\b",
+    r"\bap\b",
+    r"\bexam\b",
+    r"\btest\b",
+    r"\bklausur\b",
+)
 
 
 def classify_phrase(text: str) -> PhraseClassification:
@@ -35,35 +92,41 @@ def classify_phrase(text: str) -> PhraseClassification:
             show_answer=True,
         )
 
-    if contains_any(normalized, EXAM_HINT_WORDS):
+    if matches_any(normalized, EXAM_HINT_PATTERNS):
         return PhraseClassification(
             phrase_type="exam_hint",
             priority="high",
             show_answer=False,
         )
 
-    if contains_any(normalized, IMPORTANT_WORDS):
+    if matches_any(normalized, IMPORTANT_PATTERNS):
         return PhraseClassification(
             phrase_type="important",
             priority="high",
             show_answer=False,
         )
 
-    if contains_any(normalized, DEADLINE_WORDS):
-        return PhraseClassification(
-            phrase_type="deadline",
-            priority="high",
-            show_answer=False,
-        )
-
-    if contains_any(normalized, TASK_WORDS):
+    if matches_any(normalized, TASK_PATTERNS):
+        if matches_any(normalized, EXPLICIT_DEADLINE_PATTERNS):
+            return PhraseClassification(
+                phrase_type="deadline",
+                priority="high",
+                show_answer=False,
+            )
         return PhraseClassification(
             phrase_type="task",
             priority="medium",
             show_answer=False,
         )
 
-    if contains_any(normalized, EXAMPLE_WORDS):
+    if matches_any(normalized, EXPLICIT_DEADLINE_PATTERNS + SOFT_DEADLINE_PATTERNS):
+        return PhraseClassification(
+            phrase_type="deadline",
+            priority="high",
+            show_answer=False,
+        )
+
+    if matches_any(normalized, EXAMPLE_PATTERNS):
         return PhraseClassification(
             phrase_type="example",
             priority="medium",
@@ -87,21 +150,31 @@ def classify_phrase(text: str) -> PhraseClassification:
 def is_question(normalized: str, original: str) -> bool:
     if "?" in original:
         return True
-    return normalized.startswith(QUESTION_PREFIXES)
+    if normalized.startswith(QUESTION_PREFIXES):
+        return True
+    return bool(re.match(r"^(can|could|should|do|does|is|are)\b", normalized))
 
 
 def normalize_text(text: str) -> str:
     compact = re.sub(r"\s+", " ", text.strip().lower())
+    replacements = {
+        "ä": "a",
+        "ö": "o",
+        "ü": "u",
+        "ß": "ss",
+    }
+    for source, target in replacements.items():
+        compact = compact.replace(source, target)
     return compact
 
 
-def contains_any(text: str, needles: tuple[str, ...]) -> bool:
-    return any(needle in text for needle in needles)
+def matches_any(text: str, patterns: tuple[str, ...]) -> bool:
+    return any(re.search(pattern, text) for pattern in patterns)
 
 
 def looks_like_definition(text: str) -> bool:
     return (
         len(text.split()) >= 3
-        and contains_any(text, DEFINITION_WORDS)
+        and matches_any(text, DEFINITION_PATTERNS)
         and not text.startswith(QUESTION_PREFIXES)
     )

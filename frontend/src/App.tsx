@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 
 import { createSession, getBackendBaseUrl, ingestTranscript } from "./api/backend";
 import { connectEvents, getWebSocketUrl } from "./api/websocket";
+import { AIAnswerPanel } from "./components/AIAnswerPanel";
 import { EventLog } from "./components/EventLog";
 import { NotesPanel } from "./components/NotesPanel";
+import { QuickInsertPanel } from "./components/QuickInsertPanel";
 import { SessionControls } from "./components/SessionControls";
 import { SubtitleOverlay } from "./components/SubtitleOverlay";
 import { TextIngestBox } from "./components/TextIngestBox";
 import type {
+  AIAnswerRecord,
   EventEnvelope,
   RejectedEventPayload,
   SessionResponse,
+  StatusPayload,
   TranscriptSegment,
 } from "./types";
 
@@ -42,14 +46,38 @@ function isRejectedPayload(payload: unknown): payload is RejectedEventPayload {
   );
 }
 
+function isAIAnswerRecord(payload: unknown): payload is AIAnswerRecord {
+  if (!isObjectPayload(payload)) {
+    return false;
+  }
+
+  return (
+    typeof payload.id === "number" &&
+    typeof payload.question_id === "number" &&
+    typeof payload.question_text === "string" &&
+    typeof payload.text === "string"
+  );
+}
+
+function isStatusPayload(payload: unknown): payload is StatusPayload {
+  if (!isObjectPayload(payload)) {
+    return false;
+  }
+
+  return true;
+}
+
 export default function App() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [answers, setAnswers] = useState<AIAnswerRecord[]>([]);
   const [rejections, setRejections] = useState<string[]>([]);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
+  const [answerStatus, setAnswerStatus] = useState<string | null>(null);
   const [sessionBusy, setSessionBusy] = useState(false);
   const [requestBusy, setRequestBusy] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("Heute sprechen wir uber RAID.");
 
   useEffect(() => {
     const socket = connectEvents((event: EventEnvelope) => {
@@ -68,11 +96,25 @@ export default function App() {
         return;
       }
 
+      if (event.event_type === "ai_answer" && isAIAnswerRecord(event.payload)) {
+        const answer = event.payload;
+        setAnswers((current) => [answer, ...current.filter((item) => item.id !== answer.id)]);
+        setAnswerStatus("AI answer ready");
+        return;
+      }
+
       if (event.event_type === "status") {
         const message =
-          isObjectPayload(event.payload) && typeof event.payload.message === "string"
+          isStatusPayload(event.payload) && typeof event.payload.message === "string"
             ? event.payload.message
             : "Connected";
+        if (
+          isStatusPayload(event.payload) &&
+          event.payload.kind === "ai_answer" &&
+          typeof event.payload.state === "string"
+        ) {
+          setAnswerStatus(message);
+        }
         setStatusMessages((current) => [message, ...current]);
       }
     });
@@ -101,7 +143,9 @@ export default function App() {
       const created = await createSession(title);
       setSession(created);
       setSegments([]);
+      setAnswers([]);
       setRejections([]);
+      setAnswerStatus(null);
       setStatusMessages((current) => [
         `Session created: ${created.title} (#${created.id})`,
         ...current,
@@ -150,9 +194,9 @@ export default function App() {
 
         <section className="main-column">
           <header className="hero panel">
-            <h1>konspektai 0.2 text mode</h1>
+            <h1>konspektai 0.3 text mode</h1>
             <p>
-              Manual transcript test mode for proving realtime backend to frontend flow.
+              Manual realtime study flow with richer phrase classification and structured notes.
             </p>
             <div className="endpoint-list">
               <span>API: {getBackendBaseUrl()}</span>
@@ -167,10 +211,19 @@ export default function App() {
             onCreateSession={handleCreateSession}
           />
 
-          <TextIngestBox disabled={!session || requestBusy} onSend={handleSend} />
+          <QuickInsertPanel onPickExample={setDraftText} />
+
+          <TextIngestBox
+            disabled={!session || requestBusy}
+            initialText={draftText}
+            onSend={handleSend}
+          />
+
+          <AIAnswerPanel answers={answers} latestStatus={answerStatus} />
 
           <EventLog
             segments={segments}
+            answers={answers}
             rejections={rejections}
             statusMessages={statusMessages}
           />

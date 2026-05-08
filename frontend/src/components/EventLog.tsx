@@ -1,12 +1,13 @@
-import type { TranscriptSegment } from "../types";
+import type { AIAnswerRecord, TranscriptSegment } from "../types";
 
 interface EventLogProps {
   segments: TranscriptSegment[];
+  answers: AIAnswerRecord[];
   rejections: string[];
   statusMessages: string[];
 }
 
-export function EventLog({ segments, rejections, statusMessages }: EventLogProps) {
+export function EventLog({ segments, answers, rejections, statusMessages }: EventLogProps) {
   return (
     <section className="panel event-log">
       <h2>Transcript + Event Log</h2>
@@ -27,6 +28,17 @@ export function EventLog({ segments, rejections, statusMessages }: EventLogProps
           )}
         </div>
         <div>
+          <h3>AI Answers</h3>
+          {answers.length === 0 ? (
+            <div className="muted">No AI answers yet.</div>
+          ) : (
+            answers.map((answer) => (
+              <div key={answer.id} className="log-item answer-log">
+                <strong>{answer.question_text}</strong>
+                <div>{answer.text}</div>
+              </div>
+            ))
+          )}
           <h3>Rejected</h3>
           {rejections.length === 0 ? (
             <div className="muted">No rejections yet.</div>

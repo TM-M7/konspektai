@@ -31,6 +31,7 @@ def test_ingest_persists_question(tmp_path: Path) -> None:
     assert response.accepted is True
     assert response.segment is not None
     assert response.segment.phrase_type == "question"
+    assert response.segment.question_id is not None
     assert len(pipeline.list_segments(session["id"])) == 1
 
 
