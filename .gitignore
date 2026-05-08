@@ -8,3 +8,5 @@ backend/.venv/
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+data/exports/
+src-tauri/target/

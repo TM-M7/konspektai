@@ -1,124 +1,143 @@
 # konspektai
 
-`konspektai` is a local-first Study Copilot MVP:
+`konspektai` is a local-first Study Copilot MVP that is now in `0.8` desktop-ready mode.
 
-- `Tauri + React + TypeScript` for desktop UI
-- `Python + FastAPI + WebSocket` for backend orchestration
-- `faster-whisper` for speech-to-text
-- `Ollama + Qwen` for local AI answers
-- `SQLite` for durable session storage
+- `React + TypeScript + Vite` for the current UI
+- `Python + FastAPI` for local orchestration
+- `SQLite` for durable storage
+- optional runtime `Ollama` and `faster-whisper`
+- browser microphone capture for manual desktop-style testing
+- prepared `Tauri` shell scaffold for packaging and tray support
 
-The repository now includes a working backend skeleton built around one rule:
+Core rule:
 
 `action -> validation -> log -> error handling -> persistence`
 
-## Current scope
+## Current Scope
 
-This repo currently implements MVP `0.3` in text-only mode:
+This repo currently implements:
 
-- startup dependency checks
-- session creation
-- transcript segment ingestion
+- fast local startup checks
+- session creation, listing, restore, and rename flow
+- transcript ingestion
 - phrase classification
 - SQLite persistence
-- WebSocket event broadcasting for UI
-- React frontend for manual ingest testing
-- richer rule-based phrase classification
-- structured notes buckets for questions, important items, deadlines, tasks, definitions, and terms
-- tests for API and core logic
+- deterministic local stub answers over HTTP
+- optional Ollama runtime mode outside tests
+- simulated audio chunk ingestion
+- browser microphone recording and audio upload
+- optional faster-whisper runtime mode outside tests
+- structured notes buckets
+- flashcard generation
+- Markdown export
+- Anki CSV export
+- frontend session restore from local state
+- Tauri desktop scaffold with tray-focused shell setup
+- backend and API tests
+- 60 second test timeout guard
 
-This version intentionally avoids microphone capture so we can prove the realtime pipeline and study-note structure first.
+Current strategy:
 
-## Project layout
+- no real Ollama in tests
+- no real Whisper in tests
+- no waiting on WebSocket for correctness
+- no long health checks
+- HTTP-first interaction flow
+- browser recording is allowed for runtime, but tests stay synthetic and fast
+
+## Project Layout
 
 ```text
 backend/
   app/
-    main.py
-    config.py
-    db.py
-    logging_setup.py
-    schemas.py
-    services/
-      broadcaster.py
-      classifier.py
-      health.py
-      pipeline.py
   tests/
-    test_api.py
-    test_classifier.py
-    test_pipeline.py
-  pyproject.toml
 frontend/
   src/
-    App.tsx
-    api/
-      backend.ts
-      websocket.ts
-    components/
-      EventLog.tsx
-      NotesPanel.tsx
-      SessionControls.tsx
-      SubtitleOverlay.tsx
-      TextIngestBox.tsx
-  package.json
+src-tauri/
+  src/
+data/
+Versions.md
+README.md
 ```
 
-## Backend flow
+## Runtime Flow
 
 ```text
 App start
-  -> run dependency checks
+  -> fast local health checks
   -> initialize SQLite
-  -> open WebSocket channel
+  -> load saved sessions
+  -> restore last active session if available
 
-Manual text input
-  -> create session
+Manual text flow
+  -> create or resume session
   -> validate payload
   -> reject empty or duplicate text
   -> classify phrase
-  -> save to SQLite
-  -> broadcast event to UI
-  -> render subtitle and structured notes panels
+  -> persist segment
+  -> generate answer for questions on demand
+
+Browser audio flow
+  -> capture microphone chunk in browser
+  -> estimate duration and volume locally
+  -> send audio chunk to backend
+  -> manual mode: use fallback transcript
+  -> whisper mode: transcribe audio payload
+  -> persist accepted chunk and transcript
+
+Materials flow
+  -> generate flashcards
+  -> export Markdown
+  -> export Anki CSV
 ```
 
-## API overview
+## API Overview
 
 `GET /health/startup`
 
-- checks microphone support package
-- checks Ollama availability
-- checks Ollama model availability
-- checks `faster-whisper`
-- checks workspace and export directories
-- checks SQLite connectivity
+- fast local checks only
+- reports current runtime modes
 
 `POST /sessions`
 
 - creates a study session from `{ "title": "Test lesson" }`
 
+`GET /sessions`
+
+- returns recent sessions with counts for transcript, questions, and answers
+
+`GET /sessions/{session_id}`
+
+- returns one session summary
+
+`PATCH /sessions/{session_id}`
+
+- renames a session
+
 `POST /ingest`
 
-- accepts transcript chunks
-- classifies them
-- saves them
-- emits a WebSocket event
+- accepts transcript text
+- validates it
+- stores it
+- returns accepted or rejected result immediately
 
-`GET /sessions/{session_id}/segments`
+`POST /audio/chunks`
 
-- reads saved transcript history
+- accepts simulated or browser-recorded audio chunk payloads
+- validates duration and volume
+- uses fallback transcript in manual mode
+- can use `faster-whisper` in whisper mode
 
-`WS /ws/events`
+`POST /questions/{question_id}/answer`
 
-- streams `transcript_segment`, `ingest_rejected`, and `status` events to UI
+- generates and saves a deterministic local stub answer
+- can use Ollama when `KONSPEKTAI_ANSWER_MODE=ollama`
 
-## Running locally
+## Running Locally
 
-Start backend:
+Backend:
 
-From [backend/pyproject.toml](/C:/Users/M_M/Documents/GitHub/konspektai/backend/pyproject.toml):
-
-```bash
+```powershell
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
@@ -126,92 +145,49 @@ pip install -e .[dev]
 uvicorn app.main:app --reload
 ```
 
-Start frontend:
+Optional runtime extras:
 
-From [frontend/package.json](/C:/Users/M_M/Documents/GitHub/konspektai/frontend/package.json):
+```powershell
+pip install -e .[runtime]
+$env:KONSPEKTAI_ANSWER_MODE="ollama"
+$env:KONSPEKTAI_TRANSCRIPTION_MODE="whisper"
+```
 
-```bash
+Frontend:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-## Text-only 0.3 flow
+Desktop shell preparation:
 
-```text
-1. Open frontend
-2. Click Start Session
-3. Type or paste transcript text
-4. Send to /ingest
-5. Receive WebSocket event
-6. Show subtitle overlay
-7. Sort items into questions, important, deadlines, tasks, definitions, and terms
+```powershell
+cd frontend
+npm run desktop:dev
+npm run desktop:build
 ```
 
-## Example session request
+Note:
 
-```json
-{
-  "title": "Test lesson"
-}
-```
+- `desktop:dev` and `desktop:build` need Rust `cargo` and a Tauri CLI/runtime setup
+- those tools are not installed on this machine right now, so the desktop scaffold is prepared but not locally build-verified yet
 
-## Example ingest request
-
-```json
-{
-  "session_id": 1,
-  "timestamp": "00:35",
-  "language": "de",
-  "text": "Was ist der Unterschied zwischen RAID 0 und RAID 1?",
-  "confidence": 0.91
-}
-```
-
-Response:
-
-```json
-{
-  "accepted": true,
-  "reason": null,
-  "segment": {
-    "id": 1,
-    "session_id": 1,
-    "timestamp": "00:35",
-    "language": "de",
-    "text": "Was ist der Unterschied zwischen RAID 0 und RAID 1?",
-    "confidence": 0.91,
-    "phrase_type": "question",
-    "priority": "high",
-    "show_answer": true
-  }
-}
-```
-
-## Verified behavior
+## Verified Behavior
 
 - `POST /sessions` uses session-only payload
+- session list and rename endpoints work
 - empty text returns `accepted: false` with `reason: "empty_text"`
 - duplicate text returns `accepted: false` with `reason: "duplicate"`
 - question text is classified as `question`
-- exam-related phrases are classified as `exam_hint`
-- task phrases are classified as `task`
-- definition phrases surface extracted terms in the notes panel
-- WebSocket events include `event_type`
+- browser microphone chunks are accepted by the same audio pipeline
+- answers are generated locally without Ollama in tests
+- real Ollama can be enabled for runtime without entering tests
+- real faster-whisper can be enabled for runtime without entering tests
+- exports are written to the local export directory
+- test suite has a 60 second timeout guard
 
-## Next recommended milestones
+## Versions
 
-`0.4`
-
-- Ollama short answers with timeout and fallback status
-
-`0.5`
-
-- flashcards
-- PDF/DOCX export
-
-`0.6`
-
-- microphone capture
-- faster-whisper integration
-- system audio research only after mic path is stable
+Version history, roadmap, and future desktop notes now live in [Versions.md](/C:/Users/M_M/Documents/GitHub/konspektai/Versions.md).

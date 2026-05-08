@@ -118,8 +118,30 @@ textarea {
   gap: 14px;
 }
 
+.session-layout,
+.desktop-status-grid,
+.recorder-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.session-layout {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.desktop-status-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.recorder-toolbar {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
 .ingest-grid,
-.quick-test-grid {
+.quick-test-grid,
+.audio-grid {
   display: grid;
   gap: 12px;
 }
@@ -130,6 +152,10 @@ textarea {
 
 .quick-test-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.audio-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 label {
@@ -180,6 +206,29 @@ button:disabled {
   color: #42585e;
 }
 
+.session-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.session-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(228, 240, 238, 0.92);
+  color: #23444a;
+  font-weight: 700;
+}
+
+.session-list-button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  border-radius: 16px;
+}
+
 .notes-panel,
 .notes-group,
 .log-columns,
@@ -225,9 +274,20 @@ button:disabled {
 }
 
 .answer-stack,
-.answer-history {
+.answer-history,
+.materials-actions,
+.materials-grid {
   display: grid;
   gap: 12px;
+}
+
+.materials-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.materials-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .latest-answer {
@@ -277,8 +337,14 @@ button:disabled {
 @media (max-width: 900px) {
   .workspace,
   .log-columns,
+  .session-layout,
+  .desktop-status-grid,
+  .recorder-toolbar,
   .ingest-grid,
-  .quick-test-grid {
+  .quick-test-grid,
+  .audio-grid,
+  .materials-actions,
+  .materials-grid {
     grid-template-columns: 1fr;
   }
 }

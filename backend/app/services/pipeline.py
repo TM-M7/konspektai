@@ -6,7 +6,7 @@ from collections import deque
 
 from app.config import AppConfig
 from app.db import Database
-from app.schemas import AIAnswerRecord, IngestResponse, TranscriptIngestRequest, TranscriptSegment
+from app.schemas import AIAnswerRecord, IngestResponse, SessionSummary, TranscriptIngestRequest, TranscriptSegment
 from app.services.classifier import classify_phrase
 
 
@@ -20,6 +20,7 @@ class TranscriptPipeline:
         self._recent_texts: deque[str] = deque(maxlen=config.duplicate_window_size)
 
     def create_session(self, title: str) -> dict:
+        self._recent_texts.clear()
         with self.database.connect() as connection:
             cursor = connection.execute(
                 "INSERT INTO sessions(title) VALUES (?)",
@@ -28,6 +29,85 @@ class TranscriptPipeline:
             connection.commit()
             session_id = int(cursor.lastrowid)
         logger.info("Session created: id=%s title=%s", session_id, title)
+        return {"id": session_id, "title": title}
+
+    def list_sessions(self) -> list[SessionSummary]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    sessions.id AS id,
+                    sessions.title AS title,
+                    sessions.created_at AS created_at,
+                    COUNT(DISTINCT transcript_segments.id) AS segment_count,
+                    COUNT(DISTINCT questions.id) AS question_count,
+                    COUNT(DISTINCT answers.id) AS answer_count
+                FROM sessions
+                LEFT JOIN transcript_segments ON transcript_segments.session_id = sessions.id
+                LEFT JOIN questions ON questions.session_id = sessions.id
+                LEFT JOIN answers ON answers.question_id = questions.id
+                GROUP BY sessions.id, sessions.title, sessions.created_at
+                ORDER BY sessions.id DESC
+                """
+            ).fetchall()
+
+        return [
+            SessionSummary(
+                id=row["id"],
+                title=row["title"],
+                created_at=row["created_at"],
+                segment_count=row["segment_count"],
+                question_count=row["question_count"],
+                answer_count=row["answer_count"],
+            )
+            for row in rows
+        ]
+
+    def get_session(self, session_id: int) -> SessionSummary | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    sessions.id AS id,
+                    sessions.title AS title,
+                    sessions.created_at AS created_at,
+                    COUNT(DISTINCT transcript_segments.id) AS segment_count,
+                    COUNT(DISTINCT questions.id) AS question_count,
+                    COUNT(DISTINCT answers.id) AS answer_count
+                FROM sessions
+                LEFT JOIN transcript_segments ON transcript_segments.session_id = sessions.id
+                LEFT JOIN questions ON questions.session_id = sessions.id
+                LEFT JOIN answers ON answers.question_id = questions.id
+                WHERE sessions.id = ?
+                GROUP BY sessions.id, sessions.title, sessions.created_at
+                """,
+                (session_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return SessionSummary(
+            id=row["id"],
+            title=row["title"],
+            created_at=row["created_at"],
+            segment_count=row["segment_count"],
+            question_count=row["question_count"],
+            answer_count=row["answer_count"],
+        )
+
+    def update_session_title(self, session_id: int, title: str) -> dict | None:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                "UPDATE sessions SET title = ? WHERE id = ?",
+                (title, session_id),
+            )
+            connection.commit()
+
+        if cursor.rowcount == 0:
+            return None
+
+        logger.info("Session renamed: id=%s title=%s", session_id, title)
         return {"id": session_id, "title": title}
 
     def ingest(self, payload: TranscriptIngestRequest) -> IngestResponse:

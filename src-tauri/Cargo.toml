@@ -1,0 +1,18 @@
+[package]
+name = "konspektai-desktop"
+version = "0.8.0"
+description = "Desktop shell for konspektai"
+authors = ["konspektai"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

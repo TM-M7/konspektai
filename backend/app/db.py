@@ -25,6 +25,24 @@ CREATE TABLE IF NOT EXISTS transcript_segments (
     FOREIGN KEY (session_id) REFERENCES sessions(id)
 );
 
+CREATE TABLE IF NOT EXISTS audio_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    duration_seconds REAL NOT NULL,
+    average_volume REAL NOT NULL,
+    peak_volume REAL NOT NULL,
+    source TEXT NOT NULL,
+    language_hint TEXT,
+    simulated_text TEXT NOT NULL,
+    detected_language TEXT,
+    validation_status TEXT NOT NULL,
+    transcript_segment_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (transcript_segment_id) REFERENCES transcript_segments(id)
+);
+
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
