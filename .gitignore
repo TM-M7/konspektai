@@ -1,0 +1,9 @@
+.pytest_cache/
+.venv/
+__pycache__/
+*.pyc
+backend/data/
+backend/.coverage
+backend/.venv/
+frontend/node_modules/
+frontend/dist/

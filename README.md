@@ -1,351 +1,217 @@
 # konspektai
 
-Да, вот это уже **нормальный Study Copilot**, а не очередная “заметка с AI”, которая делает summary уровня “на уроке что-то обсуждали”. Расписываем до **уровня 3 плавающих окон**.
+`konspektai` is a local-first Study Copilot MVP:
 
-# Study Copilot: концепт интерфейса
+- `Tauri + React + TypeScript` for desktop UI
+- `Python + FastAPI + WebSocket` for backend orchestration
+- `faster-whisper` for speech-to-text
+- `Ollama + Qwen` for local AI answers
+- `SQLite` for durable session storage
 
-## Главная идея
+The repository now includes a working backend skeleton built around one rule:
 
-Программа работает поверх урока/Webex/Discord/YouTube/браузера и показывает **3 плавающих окна**:
+`action -> validation -> log -> error handling -> persistence`
 
-```text
-┌──────────────────────────────────────────────┐
-│  Окно 1: Live Subtitles + вопросы             │
-│  сверху экрана                               │
-└──────────────────────────────────────────────┘
+## Current scope
 
-┌──────────────────────┐
-│ Окно 2: Заметки       │
-│ слева                 │
-│ - важное              │
-│ - термины             │
-│ - дедлайны            │
-│ - действия            │
-└──────────────────────┘
+This repo currently implements MVP `0.2` in text-only mode:
 
-┌──────────────────────────────────────────────┐
-│  Окно 3: AI Answer Panel                     │
-│  появляется/раздвигается при вопросе          │
-└──────────────────────────────────────────────┘
-```
+- startup dependency checks
+- session creation
+- transcript segment ingestion
+- phrase classification
+- SQLite persistence
+- WebSocket event broadcasting for UI
+- React frontend for manual ingest testing
+- tests for API and core logic
 
----
+This version intentionally avoids microphone capture so we can prove the realtime pipeline first.
 
-# 1. Верхнее окно: Live Subtitles
-
-## Что показывает
+## Project layout
 
 ```text
-[12:04] Heute sprechen wir über RAID-Systeme...
-[12:05] ❓ Was ist der Unterschied zwischen RAID 0 und RAID 1?
-[12:05] RAID 1 spiegelt Daten auf zwei Festplatten...
+backend/
+  app/
+    main.py
+    config.py
+    db.py
+    logging_setup.py
+    schemas.py
+    services/
+      broadcaster.py
+      classifier.py
+      health.py
+      pipeline.py
+  tests/
+    test_api.py
+    test_classifier.py
+    test_pipeline.py
+  pyproject.toml
+frontend/
+  src/
+    App.tsx
+    api/
+      backend.ts
+      websocket.ts
+    components/
+      EventLog.tsx
+      NotesPanel.tsx
+      SessionControls.tsx
+      SubtitleOverlay.tsx
+      TextIngestBox.tsx
+  package.json
 ```
 
-## Цветовые пометки
-
-| Тип фразы     |        Цвет | Пример                     |
-| ------------- | ----------: | -------------------------- |
-| Обычная речь  | белый/серый | объяснение темы            |
-| Вопрос        |     красный | “Was ist…?”                |
-| Важное        |      жёлтый | “Das kommt in der Prüfung” |
-| Термин        |       синий | “RAID 1”, “DNS Resolver”   |
-| Дедлайн/время |  фиолетовый | “bis 12 Uhr”               |
-
-## Поведение
-
-Когда AI слышит вопрос:
+## Backend flow
 
 ```text
-❓ Was ist der Unterschied zwischen RAID 0 und RAID 1?
+App start
+  -> run dependency checks
+  -> initialize SQLite
+  -> open WebSocket channel
+
+Manual text input
+  -> create session
+  -> validate payload
+  -> reject empty or duplicate text
+  -> classify phrase
+  -> save to SQLite
+  -> broadcast event to UI
+  -> render subtitle and notes panels
 ```
 
-верхнее окно **расширяется вниз** и показывает быстрый ответ.
+## API overview
 
----
+`GET /health/startup`
 
-# 2. Авто-ответ сверху при вопросе
+- checks microphone support package
+- checks Ollama availability
+- checks Ollama model availability
+- checks `faster-whisper`
+- checks workspace and export directories
+- checks SQLite connectivity
 
-## Пример
+`POST /sessions`
+
+- creates a study session from `{ "title": "Test lesson" }`
+
+`POST /ingest`
+
+- accepts transcript chunks
+- classifies them
+- saves them
+- emits a WebSocket event
+
+`GET /sessions/{session_id}/segments`
+
+- reads saved transcript history
+
+`WS /ws/events`
+
+- streams `transcript_segment`, `ingest_rejected`, and `status` events to UI
+
+## Running locally
+
+Start backend:
+
+From [backend/pyproject.toml](/C:/Users/M_M/Documents/GitHub/konspektai/backend/pyproject.toml):
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .[dev]
+uvicorn app.main:app --reload
+```
+
+Start frontend:
+
+From [frontend/package.json](/C:/Users/M_M/Documents/GitHub/konspektai/frontend/package.json):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Text-only 0.2 flow
 
 ```text
-❓ Was ist der Unterschied zwischen RAID 0 und RAID 1?
-
-⚡ Kurzantwort:
-RAID 0 verteilt Daten auf mehrere Festplatten und ist schneller,
-aber unsicher. RAID 1 spiegelt Daten und ist sicherer, aber braucht mehr Speicher.
-
-🇷🇺 По-русски:
-RAID 0 быстрее, но без защиты данных.
-RAID 1 безопаснее, потому что копирует данные на второй диск.
+1. Open frontend
+2. Click Start Session
+3. Type or paste transcript text
+4. Send to /ingest
+5. Receive WebSocket event
+6. Show subtitle overlay
+7. Add question/important items to notes panel
 ```
 
-## Режимы ответа
-
-| Режим         | Что делает                 |
-| ------------- | -------------------------- |
-| Быстрый ответ | 1–3 строки                 |
-| Объясни проще | максимально по-человечески |
-| Экзамен       | как ответить на IHK/AP     |
-| Перевод       | перевод вопроса и ответа   |
-| Карточка      | сразу делает flashcard     |
-
----
-
-# 3. Левое окно: Notes + Important
-
-Это окно не мешает уроку и живёт слева.
-
-## Разделы
-
-```text
-📝 Заметки
-- RAID 1 = зеркалирование данных
-- RAID 0 = скорость, но нет отказоустойчивости
-
-⭐ Важно
-- RAID 1 защищает от выхода из строя одного диска
-- RAID не заменяет backup
-
-❓ Вопросы
-- Unterschied RAID 0 / RAID 1?
-
-📚 Термины
-- Redundanz
-- Spiegelung
-- Striping
-
-⏰ Организационное
-- Следующая Webex-сессия в 12:00
-```
-
----
-
-# 4. Три плавающих окна
-
-## Уровень 1: простая версия
-
-```text
-Верх:
-- live subtitles
-
-Лево:
-- заметки
-
-По кнопке:
-- спросить AI
-```
-
-Это MVP.
-
----
-
-## Уровень 2: умная версия
-
-```text
-Верх:
-- subtitles
-- подсветка вопросов
-- быстрые ответы
-
-Лево:
-- авто-заметки
-- важное
-- термины
-
-Снизу/сверху:
-- AI answer panel
-```
-
-Это уже кайфово.
-
----
-
-## Уровень 3: прям Study Copilot
-
-```text
-Верх:
-- субтитры
-- красные вопросы
-- авто-ответы
-- перевод
-
-Лево:
-- конспект
-- важное
-- термины
-- карточки
-
-AI Panel:
-- ответ
-- объяснение
-- пример
-- сохранить в PDF/DOCX
-- создать Anki-карточку
-```
-
-Вот это уже можно реально делать как продукт.
-
----
-
-# Экспорт
-
-## PDF
-
-PDF нужен для красивого конспекта:
-
-```text
-Study Copilot Notes
-Дата: ...
-Тема: ...
-
-1. Краткий конспект
-2. Основные темы
-3. Важные моменты
-4. Вопросы и ответы
-5. Термины
-6. Карточки
-7. Полный transcript
-```
-
-## DOCX
-
-DOCX нужен для редактирования:
-
-```text
-- можно поправить текст;
-- сдать учителю;
-- добавить свои мысли;
-- вставить скрины;
-- оформить как Bericht/Unterrichtsnotizen.
-```
-
-## Форматы экспорта
-
-| Формат   | Для чего                    |
-| -------- | --------------------------- |
-| PDF      | красиво сохранить/отправить |
-| DOCX     | редактировать               |
-| TXT      | быстро                      |
-| Markdown | для Obsidian/Notion         |
-| Anki CSV | карточки                    |
-
----
-
-# Техническая архитектура
-
-## Стек
-
-| Часть            | Технология                   |
-| ---------------- | ---------------------------- |
-| Desktop app      | Tauri или Electron           |
-| UI               | React                        |
-| Floating windows | Tauri/Electron always-on-top |
-| Speech-to-text   | faster-whisper               |
-| AI               | Ollama + Qwen                |
-| Backend          | Python FastAPI               |
-| Storage          | SQLite                       |
-| Export PDF       | ReportLab / WeasyPrint       |
-| Export DOCX      | python-docx                  |
-| Cards            | CSV / AnkiConnect            |
-
----
-
-# Поток данных
-
-```text
-Микрофон / системный звук
-        ↓
-faster-whisper
-        ↓
-Live transcript
-        ↓
-Classifier
-        ↓
-обычная фраза / вопрос / важное / термин
-        ↓
-Qwen через Ollama
-        ↓
-ответы / заметки / карточки / экспорт
-```
-
----
-
-# Самая важная логика
-
-## Классификатор фраз
-
-Каждый кусок текста AI должен помечать:
+## Example session request
 
 ```json
 {
-  "type": "question",
-  "importance": "high",
-  "language": "de",
-  "timestamp": "12:05",
-  "text": "Was ist der Unterschied zwischen RAID 0 und RAID 1?"
+  "title": "Test lesson"
 }
 ```
 
-Типы:
+## Example ingest request
 
-```text
-normal
-question
-important
-definition
-deadline
-task
-example
-exam_hint
+```json
+{
+  "session_id": 1,
+  "timestamp": "00:35",
+  "language": "de",
+  "text": "Was ist der Unterschied zwischen RAID 0 und RAID 1?",
+  "confidence": 0.91
+}
 ```
 
----
+Response:
 
-# MVP, который реально делать первым
-
-## Версия 0.1
-
-```text
-1. Запись микрофона
-2. Live subtitles сверху
-3. Левая панель заметок
-4. Кнопка “Сделать конспект”
-5. Экспорт в Markdown/PDF
+```json
+{
+  "accepted": true,
+  "reason": null,
+  "segment": {
+    "id": 1,
+    "session_id": 1,
+    "timestamp": "00:35",
+    "language": "de",
+    "text": "Was ist der Unterschied zwischen RAID 0 und RAID 1?",
+    "confidence": 0.91,
+    "phrase_type": "question",
+    "priority": "high",
+    "show_answer": true
+  }
+}
 ```
 
-## Версия 0.2
+## Verified behavior
 
-```text
-1. Авто-детект вопросов
-2. Красная подсветка вопросов
-3. AI quick answer
-4. Сохранение Q&A
-```
+- `POST /sessions` uses session-only payload
+- empty text returns `accepted: false` with `reason: "empty_text"`
+- duplicate text returns `accepted: false` with `reason: "duplicate"`
+- question text is classified as `question`
+- WebSocket events include `event_type`
 
-## Версия 0.3
+## Next recommended milestones
 
-```text
-1. Карточки
-2. Экспорт Anki CSV
-3. DOCX export
-4. Режим “IHK/AP preparation”
-```
+`0.3`
 
----
+- aggregate terms and deadlines in a richer notes panel
+- add better rule-based classification coverage
 
-# Название
+`0.4`
 
-Варианты:
+- Ollama short answers with timeout and fallback status
 
-```text
-StudyCopilot
-ClassGhost
-LecturePilot
-NoteFox
-BrainTape
-EduOverlay
-```
+`0.5`
 
-**ClassGhost** звучит прикольно: сидит на уроке, всё слышит, всё пишет, не мешает. Немного крипово, но люди почему-то любят криповые штуки, если они экономят время.
+- flashcards
+- PDF/DOCX export
 
-Мой выбор: **StudyCopilot** для серьёзности или **ClassGhost** для вайба.
+`0.6`
+
+- microphone capture
+- faster-whisper integration
+- system audio research only after mic path is stable
